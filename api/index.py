@@ -18,37 +18,13 @@ def telegram_api(method, data=None):
         print("telegram_api error:", e)
         return {"ok": False}
 
-def check_all_channels_joined(user_id):
-    for channel in FORCE_CHANNELS:
-        out = telegram_api("getChatMember", {
-            "chat_id": channel,
-            "user_id": user_id
-        })
-        print(f"check channel {channel} =>", out)
-        if not (out.get("ok") and out["result"].get("status") in ["member", "administrator", "creator"]):
-            return False
-    return True
-
-def send_msg(chat_id, text):
-    data = {"chat_id": chat_id, "text": text}
-    res = telegram_api("sendMessage", data)
-    print("sendMessage result:", res)
-    return res
-
 def process_update(update):
-    print("🚩 Telegram update received:", json.dumps(update))
-    # Only /start for now!
+    print("🚩 UPDATE BODY:", json.dumps(update))
     if "message" in update and "text" in update["message"]:
         msg = update["message"]
         uid = msg["from"]["id"]
-        if msg["text"].startswith("/start"):
-            # Force join check!
-            if not check_all_channels_joined(uid):
-                send_msg(msg["chat"]["id"], "🔴 Please join all required channels first.")
-            else:
-                send_msg(msg["chat"]["id"], "🟢 Joined! Full bot access granted.")
-        else:
-            send_msg(msg["chat"]["id"], "This is a debug reply.")
+        print("User id:", uid, "| Message:", msg["text"])
+        telegram_api("sendMessage", {"chat_id": msg["chat"]["id"], "text": "Debug OK: Got your message!"})
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -61,7 +37,12 @@ class handler(BaseHTTPRequestHandler):
         try:
             content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length)
-            update = json.loads(post_data.decode('utf-8'))
+            print("RAW POST BODY:", post_data)
+            try:
+                update = json.loads(post_data.decode('utf-8'))
+            except Exception as e:
+                print("JSON ERROR:", e)
+                update = {}
             process_update(update)
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
