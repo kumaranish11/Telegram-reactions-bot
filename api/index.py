@@ -1,4 +1,3 @@
-from http.server import BaseHTTPRequestHandler
 import json
 import os
 import requests
@@ -6,51 +5,42 @@ import requests
 BOT_TOKEN = os.environ.get('BOT_TOKEN', '')
 FORCE_CHANNELS = ["@Tech_Anish", "@Modinex"]
 
-def telegram_api(method, data=None):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/{method}"
+def main(request):
+    # Main Vercel handler function
     try:
-        if data:
-            r = requests.post(url, json=data, timeout=10)
+        if request.method == "GET":
+            return {
+                "statusCode": 200,
+                "headers": {"Content-Type": "application/json"},
+                "body": json.dumps({"status": "Bot working!", "ok": True})
+            }
+        elif request.method == "POST":
+            # This receives telegram webhook update!
+            payload = request.get_json()
+            print("WEBHOOK UPDATE:", json.dumps(payload))
+            # Minimal reply (Bot will simply send a message back to sender for every chat message)
+            if "message" in payload and "text" in payload["message"]:
+                msg = payload["message"]
+                chat_id = msg["chat"]["id"]
+                text = msg["text"]
+                # Reply with debug
+                send_msg(chat_id, f"Debug Reply: You sent '{text}'")
+            return {
+                "statusCode": 200,
+                "headers": {"Content-Type": "application/json"},
+                "body": json.dumps({"ok": True})
+            }
         else:
-            r = requests.get(url, timeout=10)
-        return r.json()
+            return {"statusCode": 405, "body": "Method Not Allowed"}
     except Exception as e:
-        print("telegram_api error:", e)
-        return {"ok": False}
+        print("Handler exception:", str(e))
+        return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
 
-def process_update(update):
-    print("🚩 UPDATE BODY:", json.dumps(update))
-    if "message" in update and "text" in update["message"]:
-        msg = update["message"]
-        uid = msg["from"]["id"]
-        print("User id:", uid, "| Message:", msg["text"])
-        telegram_api("sendMessage", {"chat_id": msg["chat"]["id"], "text": "Debug OK: Got your message!"})
-
-class handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'application/json')
-        self.end_headers()
-        self.wfile.write(json.dumps({"status": "Bot working!", "ok": True}).encode())
-
-    def do_POST(self):
-        try:
-            content_length = int(self.headers['Content-Length'])
-            post_data = self.rfile.read(content_length)
-            print("RAW POST BODY:", post_data)
-            try:
-                update = json.loads(post_data.decode('utf-8'))
-            except Exception as e:
-                print("JSON ERROR:", e)
-                update = {}
-            process_update(update)
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps({"ok": True}).encode())
-        except Exception as e:
-            print("Webhook error:", e)
-            self.send_response(500)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode())
+def send_msg(chat_id, text):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    data = {"chat_id": chat_id, "text": text}
+    try:
+        r = requests.post(url, json=data, timeout=10)
+        print("SendMessage to chat", chat_id, "result:", r.text)
+    except Exception as e:
+        print("SendMessage error:", e)
